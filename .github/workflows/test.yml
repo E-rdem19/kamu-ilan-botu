@@ -1,58 +1,50 @@
-name: Asama 1 Telegram Testi
+name: IlanGovTr Dedektif Testi
 
 on:
   workflow_dispatch:
 
 jobs:
-  telegram-test:
+  incele:
     runs-on: ubuntu-latest
     steps:
-      - name: Kodu Kopyala
-        uses: actions/checkout@v4
-
       - name: Python Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Kütüphaneleri Yükle
-        run: pip install -r requirements.txt
+      - name: Paketleri Yukle
+        run: pip install requests beautifulsoup4
 
-      - name: Sahte İlan ve PDF Gönderim Testi
-        env:
-          TELEGRAM_BOT_TOKEN: "9113978201:AAEsXAsPOc7fVXpFTqrNowIXdQ8AEFL8zxs"
-          TELEGRAM_CHAT_ID: "-1003782441383"
+      - name: Sayfa Icerigini Coz
         run: |
           python -c '
-          import time
-          from telegram_sender import TelegramSender
+          import requests
+          from bs4 import BeautifulSoup
 
-          print("Telegram gönderici başlatılıyor...")
-          sender = TelegramSender()
-
-          # Sahte test ilanı
-          ornek_ilan = {
-              "kaynak_site": "test_sistemi",
-              "ilan_id": "99999",
-              "baslik": "Mühendis ve Büro Personeli Alımı (TEST İLANI)",
-              "kurum": "T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",
-              "il": "Ankara",
-              "son_basvuru_tarihi": "15.12.2026",
-              "link": "https://kariyerkapisi.gov.tr"
+          url = "https://www.ilan.gov.tr/ilan/tum-ilanlar/personel-alimi?ats=5"
+          headers = {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
           }
 
-          print("1. İlan mesajı gönderiliyor...")
-          mesaj_id = sender.mesaj_gonder(ornek_ilan)
-          print(f"Mesaj başarıyla gitti! Telegram Mesaj ID: {mesaj_id}")
+          cevap = requests.get(url, headers=headers, timeout=15)
+          print(f"Durum Kodu: {cevap.status_code}")
+          
+          soup = BeautifulSoup(cevap.text, "html.parser")
+          
+          # Sayfa başlığını kontrol et
+          print("Sayfa Başlığı:", soup.title.string if soup.title else "Başlık yok")
+          
+          # İlan kartlarını arayalım
+          ilan_linkleri = soup.find_all("a", href=True)
+          bulunan_ilanlar = []
+          for a in ilan_linkleri:
+              href = a["href"]
+              if "/ilan/" in href and href != "/ilan/tum-ilanlar/personel-alimi?ats=5":
+                  metin = a.get_text(strip=True)
+                  if metin and len(metin) > 10:
+                      bulunan_ilanlar.append((metin, href))
 
-          time.sleep(2)
-
-          print("2. Örnek PDF indiriliyor ve mesaja yanıt olarak yükleniyor...")
-          ornek_pdf = "https://raw.githubusercontent.com/mozilla/pdf.js/master/examples/learning/helloworld.pdf"
-          sonuc = sender.pdf_gonder(ornek_pdf, "Bakanlik_Ilan_Metni_Test.pdf", yanitlanacak_mesaj_id=mesaj_id)
-
-          if sonuc:
-              print("BAŞARILI: PDF ilanın altına yanıt olarak eklendi! 🎉")
-          else:
-              print("PDF gönderilirken bir sorun oluştu.")
+          print(f"\nToplam bulunan olası ilan bağlantısı: {len(bulunan_ilanlar)}")
+          for baslik, link in bulunan_ilanlar[:5]:
+              print(f"-> Başlık: {baslik[:60]}... | Link: {link}")
           '
