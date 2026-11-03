@@ -1,10 +1,10 @@
-name: IlanGovTr Dedektif Testi
+name: API Bulucu Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  incele:
+  tara:
     runs-on: ubuntu-latest
     steps:
       - name: Python Kur
@@ -15,41 +15,44 @@ jobs:
       - name: Paketleri Yukle
         run: pip install requests beautifulsoup4 urllib3
 
-      - name: Sayfa Icerigini Coz
+      - name: Olası Adresleri Tara
         run: |
           python -c '
           import requests
           import urllib3
-          from bs4 import BeautifulSoup
 
-          # Guvenlik uyarilarini sustur
-          urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+          urllib3.disable_warnings()
 
-          url = "https://www.ilan.gov.tr/ilan/tum-ilanlar/personel-alimi?ats=5"
           headers = {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-              "Accept-Language": "tr-TR,tr;q=0.9"
+              "Accept": "application/json, text/plain, */*",
+              "Referer": "https://www.ilan.gov.tr/ilan/tum-ilanlar/personel-alimi?ats=5"
           }
 
-          cevap = requests.get(url, headers=headers, timeout=15, verify=False)
-          print(f"Durum Kodu: {cevap.status_code}")
-          
-          soup = BeautifulSoup(cevap.text, "html.parser")
-          print("Sayfa Basligi:", soup.title.string.strip() if soup.title else "Baslik yok")
-          
-          # Butun a linklerini tara
-          ilanlar = []
-          for a in soup.find_all("a", href=True):
-              href = a["href"]
-              metin = a.get_text(strip=True)
-              if "/ilan/" in href and len(metin) > 15:
-                  ilanlar.append((metin, href))
+          # Sitenin olası arka plan API adresleri
+          denenecek_adresler = [
+              "https://www.ilan.gov.tr/api/classifieds/search?ats=5",
+              "https://www.ilan.gov.tr/api/classified/search?ats=5",
+              "https://www.ilan.gov.tr/api/search?ats=5",
+              "https://www.ilan.gov.tr/api/classifieds?ats=5",
+              "https://www.ilan.gov.tr/api/v1/classifieds?ats=5",
+              "https://www.ilan.gov.tr/api/classifieds/list?ats=5",
+              "https://www.ilan.gov.tr/ilan/kategori/8/kamu-akademik-personel?ats=5"
+          ]
 
-          print(f"\nBulunan toplam potansiyel ilan: {len(ilanlar)}")
-          for baslik, link in ilanlar[:5]:
-              print(f"-> Baslik: {baslik} | Link: {link}")
+          print("=" * 50)
+          print("ILAN.GOV.TR API ADRESLERI TARANIYOR...")
+          print("=" * 50)
 
-          if len(ilanlar) == 0:
-              print("\nUYARI: Sayfa bos geldi. Javascript tarafindan sonradan ciziliyor olabilir.")
-              print("HTML ilk 500 karakter:\n", cevap.text[:500])
+          for url in denenecek_adresler:
+              try:
+                  r = requests.get(url, headers=headers, timeout=10, verify=False)
+                  content_type = r.headers.get("content-type", "")
+                  print(f"URL: {url} -> Kod: {r.status_code} | Tip: {content_type[:20]}")
+                  if r.status_code == 200 and "json" in content_type:
+                      print(f"--> BINGO! JSON API BULUNDU: {url}")
+                      print(f"--> Veri Ornegi: {r.text[:200]}")
+                      break
+              except Exception as e:
+                  print(f"URL: {url} -> HATA: {e}")
           '
