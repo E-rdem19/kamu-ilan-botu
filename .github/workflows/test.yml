@@ -1,4 +1,4 @@
-name: Kariyer Kapisi Veri Testi
+name: Istek Seklini Coz
 
 on:
   workflow_dispatch:
@@ -15,54 +15,26 @@ jobs:
       - name: Paketleri Yukle
         run: pip install requests urllib3
 
-      - name: Veri Servisini Cagir
+      - name: JS Kodunu Oku
         run: |
-          cat << 'EOF' > veri_test.py
+          cat << 'EOF' > oku.py
           import requests
           import urllib3
-          import json
+          import re
 
           urllib3.disable_warnings()
-
-          headers = {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-              "Accept": "application/json, text/javascript, */*; q=0.01",
-              "X-Requested-With": "XMLHttpRequest",
-              "Content-Type": "application/json; charset=UTF-8",
-              "Referer": "https://kariyerkapisi.gov.tr/isealim"
-          }
-
-          url = "https://kariyerkapisi.gov.tr/ilan/SearchIlanPublic"
+          headers = {"User-Agent": "Mozilla/5.0"}
+          url = "https://kariyerkapisi.gov.tr/js/Index/Main.dit3odhcc9.js"
           
-          # Boş arama (tüm güncel ilanları getir)
-          payload = {}
-
-          try:
-              # Hem POST hem GET deneyelim
-              r = requests.post(url, headers=headers, json=payload, timeout=15, verify=False)
-              print(f"POST Durum Kodu: {r.status_code}")
-              print(f"Cevap Türü: {r.headers.get('content-type')}")
-              
-              veri = r.json()
-              print("\nBAŞARILI! DÖNEN VERİ TİPİ:", type(veri))
-              
-              # Dönen ilk 2 ilanı ekrana bas
-              if isinstance(veri, list):
-                  print(f"Toplam İlan Sayısı: {len(veri)}")
-                  for i, ilan in enumerate(veri[:2], 1):
-                      print(f"\n--- ÖRNEK İLAN {i} ---")
-                      print(json.dumps(ilan, indent=2, ensure_ascii=False))
-              elif isinstance(veri, dict):
-                  print("Anahtar kelimeler:", list(veri.keys()))
-                  for k, v in veri.items():
-                      if isinstance(v, list):
-                          print(f"'{k}' listesinde {len(v)} adet eleman var.")
-                          if len(v) > 0:
-                              print("\n--- ÖRNEK İLAN DETAYI ---")
-                              print(json.dumps(v[0], indent=2, ensure_ascii=False)[:1000])
-                          break
-          except Exception as e:
-              print("POST Hatası:", e)
-              print("İlk 200 karakter:", r.text[:200] if 'r' in locals() else "Yok")
+          r = requests.get(url, headers=headers, verify=False)
+          
+          # SearchIlanPublic kelimesinin geçtiği yerin etrafındaki 300 karakteri yakala
+          for match in re.finditer(r"SearchIlanPublic", r.text):
+              baslangic = max(0, match.start() - 100)
+              bitis = min(len(r.text), match.end() + 250)
+              print("=" * 50)
+              print("YAKALANAN AJAX KODU:")
+              print("=" * 50)
+              print(r.text[baslangic:bitis])
           EOF
-          python veri_test.py
+          python oku.py
