@@ -13,38 +13,43 @@ jobs:
           python-version: '3.11'
 
       - name: Paketleri Yukle
-        run: pip install requests beautifulsoup4
+        run: pip install requests beautifulsoup4 urllib3
 
       - name: Sayfa Icerigini Coz
         run: |
           python -c '
           import requests
+          import urllib3
           from bs4 import BeautifulSoup
+
+          # Guvenlik uyarilarini sustur
+          urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
           url = "https://www.ilan.gov.tr/ilan/tum-ilanlar/personel-alimi?ats=5"
           headers = {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+              "Accept-Language": "tr-TR,tr;q=0.9"
           }
 
-          cevap = requests.get(url, headers=headers, timeout=15)
+          cevap = requests.get(url, headers=headers, timeout=15, verify=False)
           print(f"Durum Kodu: {cevap.status_code}")
           
           soup = BeautifulSoup(cevap.text, "html.parser")
+          print("Sayfa Basligi:", soup.title.string.strip() if soup.title else "Baslik yok")
           
-          # Sayfa başlığını kontrol et
-          print("Sayfa Başlığı:", soup.title.string if soup.title else "Başlık yok")
-          
-          # İlan kartlarını arayalım
-          ilan_linkleri = soup.find_all("a", href=True)
-          bulunan_ilanlar = []
-          for a in ilan_linkleri:
+          # Butun a linklerini tara
+          ilanlar = []
+          for a in soup.find_all("a", href=True):
               href = a["href"]
-              if "/ilan/" in href and href != "/ilan/tum-ilanlar/personel-alimi?ats=5":
-                  metin = a.get_text(strip=True)
-                  if metin and len(metin) > 10:
-                      bulunan_ilanlar.append((metin, href))
+              metin = a.get_text(strip=True)
+              if "/ilan/" in href and len(metin) > 15:
+                  ilanlar.append((metin, href))
 
-          print(f"\nToplam bulunan olası ilan bağlantısı: {len(bulunan_ilanlar)}")
-          for baslik, link in bulunan_ilanlar[:5]:
-              print(f"-> Başlık: {baslik[:60]}... | Link: {link}")
+          print(f"\nBulunan toplam potansiyel ilan: {len(ilanlar)}")
+          for baslik, link in ilanlar[:5]:
+              print(f"-> Baslik: {baslik} | Link: {link}")
+
+          if len(ilanlar) == 0:
+              print("\nUYARI: Sayfa bos geldi. Javascript tarafindan sonradan ciziliyor olabilir.")
+              print("HTML ilk 500 karakter:\n", cevap.text[:500])
           '
