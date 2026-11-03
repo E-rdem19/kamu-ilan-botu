@@ -1,4 +1,4 @@
-name: Sayfa Tarayici
+name: Kariyer Kapisi Inceleme
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
       - name: Paketleri Yukle
         run: pip install requests beautifulsoup4 urllib3
 
-      - name: Icerikleri Kontrol Et
+      - name: Kartlari Coz
         run: |
           python -c '
           import requests
@@ -29,32 +29,20 @@ jobs:
               "Accept-Language": "tr-TR,tr;q=0.9"
           }
 
-          print("=" * 50)
-          print("1. KARIYER KAPISI KONTROL EDILIYOR...")
-          print("=" * 50)
-          try:
-              r_kk = requests.get("https://kariyerkapisi.gov.tr/isealim", headers=headers, timeout=12, verify=False)
-              soup_kk = BeautifulSoup(r_kk.text, "html.parser")
-              print("Kariyer Kapısı Başlık:", soup_kk.title.string.strip() if soup_kk.title else "Yok")
-              kartlar_kk = soup_kk.find_all(class_=lambda x: x and ("card" in x or "ilan" in x or "item" in x))
-              print(f"Kariyer Kapısı İlan/Kart Sayısı: {len(kartlar_kk)}")
-              # Linkleri ara
-              ilan_linkleri_kk = [a["href"] for a in soup_kk.find_all("a", href=True) if "ilan" in a["href"] or "duyuru" in a["href"]]
-              print(f"Kariyer Kapısı İlan Linki Sayısı: {len(ilan_linkleri_kk)}")
-          except Exception as e:
-              print("Kariyer Kapısı Hata:", e)
+          r = requests.get("https://kariyerkapisi.gov.tr/isealim", headers=headers, timeout=15, verify=False)
+          soup = BeautifulSoup(r.text, "html.parser")
 
-          print("\n" + "=" * 50)
-          print("2. ILAN.GOV.TR KATEGORI SAYFASI KONTROL EDILIYOR...")
+          kartlar = soup.find_all(class_=lambda x: x and ("card" in x or "ilan" in x or "item" in x))
+
           print("=" * 50)
-          try:
-              r_ig = requests.get("https://www.ilan.gov.tr/ilan/kategori/8/kamu-akademik-personel?ats=5", headers=headers, timeout=12, verify=False)
-              soup_ig = BeautifulSoup(r_ig.text, "html.parser")
-              print("İlan Gov Tr Başlık:", soup_ig.title.string.strip() if soup_ig.title else "Yok")
-              ilan_linkleri_ig = [a["href"] for a in soup_ig.find_all("a", href=True) if "/ilan/" in a["href"] and len(a.get_text(strip=True)) > 15]
-              print(f"İlan Gov Tr İlan Sayısı: {len(ilan_linkleri_ig)}")
-              for link in ilan_linkleri_ig[:3]:
-                  print("-> Örnek Link:", link)
-          except Exception as e:
-              print("İlan Gov Tr Hata:", e)
+          print(f"TOPLAM BULUNAN KART SAYISI: {len(kartlar)}")
+          print("=" * 50)
+
+          for i, kart in enumerate(kartlar[:3], 1):
+              print(f"\n--- KART {i} ---")
+              print("Metin:\n", kart.get_text(separator=" | ", strip=True)[:300])
+              # Kart içindeki tüm linkler ve butonlar
+              linkler = kart.find_all(["a", "button"])
+              for l in linkler:
+                  print("  -> Etiket:", l.name, "| Href:", l.get("href"), "| Onclick:", l.get("onclick"), "| Buton Metni:", l.get_text(strip=True))
           '
