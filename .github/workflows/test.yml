@@ -1,7 +1,7 @@
 name: Erisim Testi
 
 on:
-  workflow_dispatch: # Bu ayar, testi bir butona basarak elle başlatmamızı sağlar.
+  workflow_dispatch:
 
 jobs:
   test-siteler:
@@ -15,7 +15,7 @@ jobs:
       - name: Gerekli Paketleri Yukle
         run: pip install requests urllib3
 
-      - name: Siteleri ve PDF Erisimini Test Et
+      - name: Gelismis Basliklarla Test Et
         run: |
           python -c '
           import requests
@@ -28,34 +28,29 @@ jobs:
               "Kariyer Kapisi": "https://kariyerkapisi.gov.tr/isealim"
           }
 
+          # Gercek bir Turkce Chrome tarayicisi kimligi
           headers = {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+              "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+              "Cache-Control": "no-cache",
+              "Pragma": "no-cache"
           }
 
+          session = requests.Session()
+          session.headers.update(headers)
+
           print("=" * 50)
-          print("1. SITELERIN ANA SAYFA ERISIM TESTI")
+          print("GELISMIS KIMLIKLI ERISIM TESTI")
           print("=" * 50)
 
           for ad, url in siteler.items():
               baslangic = time.time()
               try:
-                  cevap = requests.get(url, headers=headers, timeout=15, verify=False)
+                  cevap = session.get(url, timeout=12, verify=False)
                   gecen_sure = round(time.time() - baslangic, 2)
                   print(f"[{ad}] -> Durum Kodu: {cevap.status_code} | Sure: {gecen_sure} sn")
               except Exception as e:
                   gecen_sure = round(time.time() - baslangic, 2)
-                  print(f"[{ad}] -> HATA OLUSTU: {type(e).__name__} | Sure: {gecen_sure} sn")
-
-          print("\n" + "=" * 50)
-          print("2. ORNEK PDF INDIRME TESTI")
-          print("=" * 50)
-          
-          # Kamuilan sitesinden ornek bir PDF duyuru linki
-          ornek_pdf_url = "https://kamuilan.sbb.gov.tr/ilanDetay.aspx?kod=1" 
-          try:
-              pdf_cevap = requests.get("https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", headers=headers, timeout=15)
-              boyut_kb = round(len(pdf_cevap.content) / 1024, 2)
-              print(f"Genel Test PDF -> Durum Kodu: {pdf_cevap.status_code} | Boyut: {boyut_kb} KB")
-          except Exception as e:
-              print(f"Genel Test PDF -> HATA: {e}")
+                  print(f"[{ad}] -> HATA: {type(e).__name__} | Sure: {gecen_sure} sn")
           '
