@@ -1,4 +1,4 @@
-name: Kariyer Kapisi Inceleme
+name: Kariyer Kapisi API Dedektifi
 
 on:
   workflow_dispatch:
@@ -15,12 +15,14 @@ jobs:
       - name: Paketleri Yukle
         run: pip install requests beautifulsoup4 urllib3
 
-      - name: Kartlari Coz
+      - name: Javascript ve APIyi Coz
         run: |
           python -c '
           import requests
           import urllib3
+          import re
           from bs4 import BeautifulSoup
+          from urllib.parse import urljoin
 
           urllib3.disable_warnings()
 
@@ -29,20 +31,40 @@ jobs:
               "Accept-Language": "tr-TR,tr;q=0.9"
           }
 
-          r = requests.get("https://kariyerkapisi.gov.tr/isealim", headers=headers, timeout=15, verify=False)
+          url = "https://kariyerkapisi.gov.tr/isealim"
+          r = requests.get(url, headers=headers, timeout=15, verify=False)
           soup = BeautifulSoup(r.text, "html.parser")
 
-          kartlar = soup.find_all(class_=lambda x: x and ("card" in x or "ilan" in x or "item" in x))
+          # Sayfadaki tum script dosyalarini bul
+          scripts = [s.get("src") for s in soup.find_all("script") if s.get("src")]
 
           print("=" * 50)
-          print(f"TOPLAM BULUNAN KART SAYISI: {len(kartlar)}")
+          print(f"BULUNAN JS DOSYALARI ({len(scripts)} adet)")
           print("=" * 50)
 
-          for i, kart in enumerate(kartlar[:3], 1):
-              print(f"\n--- KART {i} ---")
-              print("Metin:\n", kart.get_text(separator=" | ", strip=True)[:300])
-              # Kart içindeki tüm linkler ve butonlar
-              linkler = kart.find_all(["a", "button"])
-              for l in linkler:
-                  print("  -> Etiket:", l.name, "| Href:", l.get("href"), "| Onclick:", l.get("onclick"), "| Buton Metni:", l.get_text(strip=True))
+          api_adaylari = set()
+
+          # Sayfa icindeki gomulu scriptlerde API arayalim
+          for s in soup.find_all("script"):
+              if s.string:
+                  bulunanlar = re.findall(r"[\"'\`](/[a-zA-Z0-9_\-/]+(?:api|ilan|isealim|list|get)[a-zA-Z0-9_\-/]*)[\"'\`]", s.string, re.IGNORECASE)
+                  for b in bulunanlar:
+                      api_adaylari.add(b)
+
+          # Harici JS dosyalarini indirip icinde arayalim
+          for s_url in scripts:
+              tam_url = urljoin(url, s_url)
+              if "google" in tam_url or "jquery" in tam_url or "bootstrap" in tam_url:
+                  continue
+              try:
+                  js_cevap = requests.get(tam_url, headers=headers, timeout=10, verify=False)
+                  bulunanlar = re.findall(r"[\"'\`](/[a-zA-Z0-9_\-/]+(?:api|ilan|isealim|list|get)[a-zA-Z0-9_\-/]*)[\"'\`]", js_cevap.text, re.IGNORECASE)
+                  for b in bulunanlar:
+                      api_adaylari.add(b)
+              except:
+                  pass
+
+          print("\nYAKALANAN OLASI API ADRESLERI:")
+          for api in sorted(api_adaylari):
+              print("->", api)
           '
