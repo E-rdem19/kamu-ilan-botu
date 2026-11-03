@@ -7,6 +7,9 @@ jobs:
   incele:
     runs-on: ubuntu-latest
     steps:
+      - name: Kodu Kopyala
+        uses: actions/checkout@v4
+
       - name: Python Kur
         uses: actions/setup-python@v5
         with:
@@ -15,56 +18,5 @@ jobs:
       - name: Paketleri Yukle
         run: pip install requests beautifulsoup4 urllib3
 
-      - name: Javascript ve APIyi Coz
-        run: |
-          python -c '
-          import requests
-          import urllib3
-          import re
-          from bs4 import BeautifulSoup
-          from urllib.parse import urljoin
-
-          urllib3.disable_warnings()
-
-          headers = {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-              "Accept-Language": "tr-TR,tr;q=0.9"
-          }
-
-          url = "https://kariyerkapisi.gov.tr/isealim"
-          r = requests.get(url, headers=headers, timeout=15, verify=False)
-          soup = BeautifulSoup(r.text, "html.parser")
-
-          # Sayfadaki tum script dosyalarini bul
-          scripts = [s.get("src") for s in soup.find_all("script") if s.get("src")]
-
-          print("=" * 50)
-          print(f"BULUNAN JS DOSYALARI ({len(scripts)} adet)")
-          print("=" * 50)
-
-          api_adaylari = set()
-
-          # Sayfa icindeki gomulu scriptlerde API arayalim
-          for s in soup.find_all("script"):
-              if s.string:
-                  bulunanlar = re.findall(r"[\"'\`](/[a-zA-Z0-9_\-/]+(?:api|ilan|isealim|list|get)[a-zA-Z0-9_\-/]*)[\"'\`]", s.string, re.IGNORECASE)
-                  for b in bulunanlar:
-                      api_adaylari.add(b)
-
-          # Harici JS dosyalarini indirip icinde arayalim
-          for s_url in scripts:
-              tam_url = urljoin(url, s_url)
-              if "google" in tam_url or "jquery" in tam_url or "bootstrap" in tam_url:
-                  continue
-              try:
-                  js_cevap = requests.get(tam_url, headers=headers, timeout=10, verify=False)
-                  bulunanlar = re.findall(r"[\"'\`](/[a-zA-Z0-9_\-/]+(?:api|ilan|isealim|list|get)[a-zA-Z0-9_\-/]*)[\"'\`]", js_cevap.text, re.IGNORECASE)
-                  for b in bulunanlar:
-                      api_adaylari.add(b)
-              except:
-                  pass
-
-          print("\nYAKALANAN OLASI API ADRESLERI:")
-          for api in sorted(api_adaylari):
-              print("->", api)
-          '
+      - name: Dedektifi Calistir
+        run: python dedektif.py
