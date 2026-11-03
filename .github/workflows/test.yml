@@ -1,56 +1,59 @@
-name: Erisim Testi
+name: Asama 1 Telegram Testi
 
 on:
   workflow_dispatch:
 
 jobs:
-  test-siteler:
+  telegram-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Python Kurulumu
+      - name: Kodu Kopyala
+        uses: actions/checkout@v4
+
+      - name: Python Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Gerekli Paketleri Yukle
-        run: pip install requests urllib3
+      - name: Kütüphaneleri Yükle
+        run: pip install -r requirements.txt
 
-      - name: Gelismis Basliklarla Test Et
+      - name: Sahte İlan ve PDF Gönderim Testi
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python -c '
-          import requests
           import time
+          from telegram_sender import TelegramSender
 
-          siteler = {
-              "Kamuilan (SBB)": "https://kamuilan.sbb.gov.tr",
-              "Yerel Yonetimler (CSB)": "https://yerelyonetimler.csb.gov.tr",
-              "Ilan Gov Tr": "https://www.ilan.gov.tr/ilan/tum-ilanlar/personel-alimi?ats=5",
-              "Kariyer Kapisi": "https://kariyerkapisi.gov.tr/isealim"
+          print("Telegram gönderici başlatılıyor...")
+          sender = TelegramSender()
+
+          # Sahte test ilanı
+          ornek_ilan = {
+              "kaynak_site": "test_sistemi",
+              "ilan_id": "99999",
+              "baslik": "Mühendis ve Büro Personeli Alımı (TEST İLANI)",
+              "kurum": "T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",
+              "il": "Ankara",
+              "son_basvuru_tarihi": "15.12.2026",
+              "link": "https://kariyerkapisi.gov.tr"
           }
 
-          # Gercek bir Turkce Chrome tarayicisi kimligi
-          headers = {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-              "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-              "Cache-Control": "no-cache",
-              "Pragma": "no-cache"
-          }
+          print("1. İlan mesajı gönderiliyor...")
+          mesaj_id = sender.mesaj_gonder(ornek_ilan)
+          print(f"Mesaj başarıyla gitti! Telegram Mesaj ID: {mesaj_id}")
 
-          session = requests.Session()
-          session.headers.update(headers)
+          time.sleep(2)
 
-          print("=" * 50)
-          print("GELISMIS KIMLIKLI ERISIM TESTI")
-          print("=" * 50)
+          print("2. Örnek PDF indiriliyor ve mesaja yanıt olarak yükleniyor...")
+          # Güvenilir küçük bir açık kaynak PDF örneği
+          ornek_pdf = "https://raw.githubusercontent.com/mozilla/pdf.js/master/examples/learning/helloworld.pdf"
+          sonuc = sender.pdf_gonder(ornek_pdf, "Bakanlik_Ilan_Metni_Test.pdf", yanitlanacak_mesaj_id=mesaj_id)
 
-          for ad, url in siteler.items():
-              baslangic = time.time()
-              try:
-                  cevap = session.get(url, timeout=12, verify=False)
-                  gecen_sure = round(time.time() - baslangic, 2)
-                  print(f"[{ad}] -> Durum Kodu: {cevap.status_code} | Sure: {gecen_sure} sn")
-              except Exception as e:
-                  gecen_sure = round(time.time() - baslangic, 2)
-                  print(f"[{ad}] -> HATA: {type(e).__name__} | Sure: {gecen_sure} sn")
+          if sonuc:
+              print("BAŞARILI: PDF ilanın altına yanıt olarak eklendi! 🎉")
+          else:
+              print("PDF gönderilirken bir sorun oluştu.")
           '
