@@ -20,8 +20,8 @@ jobs:
 
       - name: Sahte İlan ve PDF Gönderim Testi
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: "9113978201:AAEsXAsPOc7fVXpFTqrNowIXdQ8AEFL8zxs"
+          TELEGRAM_CHAT_ID: "-1003782441383"
         run: |
           python -c '
           import time
@@ -48,7 +48,6 @@ jobs:
           time.sleep(2)
 
           print("2. Örnek PDF indiriliyor ve mesaja yanıt olarak yükleniyor...")
-          # Güvenilir küçük bir açık kaynak PDF örneği
           ornek_pdf = "https://raw.githubusercontent.com/mozilla/pdf.js/master/examples/learning/helloworld.pdf"
           sonuc = sender.pdf_gonder(ornek_pdf, "Bakanlik_Ilan_Metni_Test.pdf", yanitlanacak_mesaj_id=mesaj_id)
 
