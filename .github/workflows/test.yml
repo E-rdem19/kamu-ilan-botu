@@ -1,10 +1,10 @@
-name: API Bulucu Test
+name: Sayfa Tarayici
 
 on:
   workflow_dispatch:
 
 jobs:
-  tara:
+  incele:
     runs-on: ubuntu-latest
     steps:
       - name: Python Kur
@@ -15,44 +15,46 @@ jobs:
       - name: Paketleri Yukle
         run: pip install requests beautifulsoup4 urllib3
 
-      - name: Olası Adresleri Tara
+      - name: Icerikleri Kontrol Et
         run: |
           python -c '
           import requests
           import urllib3
+          from bs4 import BeautifulSoup
 
           urllib3.disable_warnings()
 
           headers = {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-              "Accept": "application/json, text/plain, */*",
-              "Referer": "https://www.ilan.gov.tr/ilan/tum-ilanlar/personel-alimi?ats=5"
+              "Accept-Language": "tr-TR,tr;q=0.9"
           }
 
-          # Sitenin olası arka plan API adresleri
-          denenecek_adresler = [
-              "https://www.ilan.gov.tr/api/classifieds/search?ats=5",
-              "https://www.ilan.gov.tr/api/classified/search?ats=5",
-              "https://www.ilan.gov.tr/api/search?ats=5",
-              "https://www.ilan.gov.tr/api/classifieds?ats=5",
-              "https://www.ilan.gov.tr/api/v1/classifieds?ats=5",
-              "https://www.ilan.gov.tr/api/classifieds/list?ats=5",
-              "https://www.ilan.gov.tr/ilan/kategori/8/kamu-akademik-personel?ats=5"
-          ]
-
           print("=" * 50)
-          print("ILAN.GOV.TR API ADRESLERI TARANIYOR...")
+          print("1. KARIYER KAPISI KONTROL EDILIYOR...")
           print("=" * 50)
+          try:
+              r_kk = requests.get("https://kariyerkapisi.gov.tr/isealim", headers=headers, timeout=12, verify=False)
+              soup_kk = BeautifulSoup(r_kk.text, "html.parser")
+              print("Kariyer Kapısı Başlık:", soup_kk.title.string.strip() if soup_kk.title else "Yok")
+              kartlar_kk = soup_kk.find_all(class_=lambda x: x and ("card" in x or "ilan" in x or "item" in x))
+              print(f"Kariyer Kapısı İlan/Kart Sayısı: {len(kartlar_kk)}")
+              # Linkleri ara
+              ilan_linkleri_kk = [a["href"] for a in soup_kk.find_all("a", href=True) if "ilan" in a["href"] or "duyuru" in a["href"]]
+              print(f"Kariyer Kapısı İlan Linki Sayısı: {len(ilan_linkleri_kk)}")
+          except Exception as e:
+              print("Kariyer Kapısı Hata:", e)
 
-          for url in denenecek_adresler:
-              try:
-                  r = requests.get(url, headers=headers, timeout=10, verify=False)
-                  content_type = r.headers.get("content-type", "")
-                  print(f"URL: {url} -> Kod: {r.status_code} | Tip: {content_type[:20]}")
-                  if r.status_code == 200 and "json" in content_type:
-                      print(f"--> BINGO! JSON API BULUNDU: {url}")
-                      print(f"--> Veri Ornegi: {r.text[:200]}")
-                      break
-              except Exception as e:
-                  print(f"URL: {url} -> HATA: {e}")
+          print("\n" + "=" * 50)
+          print("2. ILAN.GOV.TR KATEGORI SAYFASI KONTROL EDILIYOR...")
+          print("=" * 50)
+          try:
+              r_ig = requests.get("https://www.ilan.gov.tr/ilan/kategori/8/kamu-akademik-personel?ats=5", headers=headers, timeout=12, verify=False)
+              soup_ig = BeautifulSoup(r_ig.text, "html.parser")
+              print("İlan Gov Tr Başlık:", soup_ig.title.string.strip() if soup_ig.title else "Yok")
+              ilan_linkleri_ig = [a["href"] for a in soup_ig.find_all("a", href=True) if "/ilan/" in a["href"] and len(a.get_text(strip=True)) > 15]
+              print(f"İlan Gov Tr İlan Sayısı: {len(ilan_linkleri_ig)}")
+              for link in ilan_linkleri_ig[:3]:
+                  print("-> Örnek Link:", link)
+          except Exception as e:
+              print("İlan Gov Tr Hata:", e)
           '
