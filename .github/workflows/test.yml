@@ -1,4 +1,4 @@
-name: Istek Seklini Coz
+name: API URL Yakala
 
 on:
   workflow_dispatch:
@@ -15,26 +15,31 @@ jobs:
       - name: Paketleri Yukle
         run: pip install requests urllib3
 
-      - name: JS Kodunu Oku
+      - name: Adresi Yakala
         run: |
-          cat << 'EOF' > oku.py
+          cat << 'EOF' > adresi_bul.py
           import requests
           import urllib3
           import re
 
           urllib3.disable_warnings()
           headers = {"User-Agent": "Mozilla/5.0"}
-          url = "https://kariyerkapisi.gov.tr/js/Index/Main.dit3odhcc9.js"
           
-          r = requests.get(url, headers=headers, verify=False)
+          # 1. Ana sayfanın HTML kodundaki tanımlara bakalım
+          r = requests.get("https://kariyerkapisi.gov.tr/isealim", headers=headers, verify=False)
+          eslesmeler = re.findall(r"apiURL\s*[:=]\s*['\"`]([^'\"`]+)['\"`]", r.text, re.IGNORECASE)
+          print("HTML'den bulunan apiURL:", eslesmeler)
+
+          # 2. Infrastructure JS dosyasındaki tanımlara bakalım
+          r2 = requests.get("https://kariyerkapisi.gov.tr/js/Infrastructure.ncmia0gyd4.js", headers=headers, verify=False)
+          eslesmeler2 = re.findall(r"apiURL\s*[:=]\s*['\"`]([^'\"`]+)['\"`]", r2.text, re.IGNORECASE)
+          print("JS'den bulunan apiURL:", eslesmeler2)
           
-          # SearchIlanPublic kelimesinin geçtiği yerin etrafındaki 300 karakteri yakala
-          for match in re.finditer(r"SearchIlanPublic", r.text):
-              baslangic = max(0, match.start() - 100)
-              bitis = min(len(r.text), match.end() + 250)
-              print("=" * 50)
-              print("YAKALANAN AJAX KODU:")
-              print("=" * 50)
-              print(r.text[baslangic:bitis])
+          # Eğer çıkmazsa iko.var tanımını yakalayalım
+          for m in re.finditer(r"apiURL", r2.text):
+              baslangic = max(0, m.start() - 50)
+              bitis = min(len(r2.text), m.end() + 100)
+              print("Etrafındaki kod:", r2.text[baslangic:bitis])
+              break
           EOF
-          python oku.py
+          python adresi_bul.py
