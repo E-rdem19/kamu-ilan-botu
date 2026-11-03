@@ -1,1 +1,61 @@
+name: Erisim Testi
 
+on:
+  workflow_dispatch: # Bu ayar, testi bir butona basarak elle başlatmamızı sağlar.
+
+jobs:
+  test-siteler:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Python Kurulumu
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Gerekli Paketleri Yukle
+        run: pip install requests urllib3
+
+      - name: Siteleri ve PDF Erisimini Test Et
+        run: |
+          python -c '
+          import requests
+          import time
+
+          siteler = {
+              "Kamuilan (SBB)": "https://kamuilan.sbb.gov.tr",
+              "Yerel Yonetimler (CSB)": "https://yerelyonetimler.csb.gov.tr",
+              "Ilan Gov Tr": "https://www.ilan.gov.tr/ilan/tum-ilanlar/personel-alimi?ats=5",
+              "Kariyer Kapisi": "https://kariyerkapisi.gov.tr/isealim"
+          }
+
+          headers = {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          }
+
+          print("=" * 50)
+          print("1. SITELERIN ANA SAYFA ERISIM TESTI")
+          print("=" * 50)
+
+          for ad, url in siteler.items():
+              baslangic = time.time()
+              try:
+                  cevap = requests.get(url, headers=headers, timeout=15, verify=False)
+                  gecen_sure = round(time.time() - baslangic, 2)
+                  print(f"[{ad}] -> Durum Kodu: {cevap.status_code} | Sure: {gecen_sure} sn")
+              except Exception as e:
+                  gecen_sure = round(time.time() - baslangic, 2)
+                  print(f"[{ad}] -> HATA OLUSTU: {type(e).__name__} | Sure: {gecen_sure} sn")
+
+          print("\n" + "=" * 50)
+          print("2. ORNEK PDF INDIRME TESTI")
+          print("=" * 50)
+          
+          # Kamuilan sitesinden ornek bir PDF duyuru linki
+          ornek_pdf_url = "https://kamuilan.sbb.gov.tr/ilanDetay.aspx?kod=1" 
+          try:
+              pdf_cevap = requests.get("https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", headers=headers, timeout=15)
+              boyut_kb = round(len(pdf_cevap.content) / 1024, 2)
+              print(f"Genel Test PDF -> Durum Kodu: {pdf_cevap.status_code} | Boyut: {boyut_kb} KB")
+          except Exception as e:
+              print(f"Genel Test PDF -> HATA: {e}")
+          '
