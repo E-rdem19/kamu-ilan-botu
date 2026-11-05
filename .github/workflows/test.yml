@@ -20,9 +20,10 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium --with-deps
 
-      - name: Sayfadaki Butun Ag Isteklerini Gor
+      - name: GetIseAlimPage Verisini Yakala
         run: |
           cat << 'EOF' > kk_test.py
+          import json
           import time
           from playwright.sync_api import sync_playwright
 
@@ -33,31 +34,42 @@ jobs:
               ctx = browser.new_context(locale="tr-TR", ignore_https_errors=True)
               page = ctx.new_page()
 
-              tum_istekler = []
+              yakalanan_veri = {}
 
-              def on_request(r):
-                  # Resim, yazı tipi ve css hariç her isteği topla
-                  if r.resource_type in ["fetch", "xhr"]:
-                      tum_istekler.append((r.method, r.url))
+              def on_response(r):
+                  if "GetIseAlimPage" in r.url:
+                      print(f"\n[YAKALANDI] Durum Kodu: {r.status}")
+                      print(f"İstek Başlıkları: {dict(r.request.headers)}")
+                      print(f"İstek Gövdesi (Payload): {r.request.post_data}")
+                      try:
+                          yakalanan_veri["data"] = r.json()
+                      except Exception as e:
+                          print("JSON okunamadı:", e)
 
-              page.on("request", on_request)
+              page.on("response", on_response)
               
               page.goto(url, wait_until="domcontentloaded", timeout=30000)
-              page.wait_for_timeout(3000)
+              page.wait_for_timeout(4000)
 
-              print("=" * 50)
-              print(f"SAYFADAN GIDEN AJAX / FETCH ISTEKLERI ({len(tum_istekler)} adet):")
-              print("=" * 50)
-              for method, u in tum_istekler:
-                  print(f"[{method}] -> {u}")
-
-              print("\n" + "=" * 50)
-              print("SAYFADA TIKLANABILIR BUTONLAR:")
-              print("=" * 50)
-              butonlar = page.locator("button, a.btn, input[type=submit]").all_text_contents()
-              for b in butonlar:
-                  if b.strip():
-                      print("-> Buton:", b.strip())
+              veri = yakalanan_veri.get("data")
+              if veri:
+                  print("=" * 50)
+                  print("KARIYER KAPISI ILANLARI BASARIYLA ALINDI!")
+                  print("=" * 50)
+                  # Dönen verinin yapısını görelim
+                  if isinstance(veri, dict):
+                      print("Sözlük Anahtarları:", list(veri.keys()))
+                      # Muhtemelen 'ilanlar' veya 'data' gibi bir liste vardır
+                      for k, v in veri.items():
+                          if isinstance(v, list):
+                              print(f"\n'{k}' listesinde {len(v)} adet eleman var!")
+                              if len(v) > 0:
+                                  print("İlk İlan Örneği:\n", json.dumps(v[0], indent=2, ensure_ascii=False)[:800])
+                  elif isinstance(veri, list):
+                      print(f"Toplam İlan: {len(veri)}")
+                      print("İlk İlan Örneği:\n", json.dumps(veri[0], indent=2, ensure_ascii=False)[:800])
+              else:
+                  print("Veri henüz yakalanamadı.")
 
               browser.close()
           EOF
