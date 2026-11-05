@@ -1,45 +1,64 @@
-name: API URL Yakala
+name: IlanGovTr Telegram Canli Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  canli-test:
     runs-on: ubuntu-latest
     steps:
+      - name: Kodu Kopyala
+        uses: actions/checkout@v4
+
       - name: Python Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Paketleri Yukle
-        run: pip install requests urllib3
-
-      - name: Adresi Yakala
         run: |
-          cat << 'EOF' > adresi_bul.py
-          import requests
-          import urllib3
-          import re
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
 
-          urllib3.disable_warnings()
-          headers = {"User-Agent": "Mozilla/5.0"}
-          
-          # 1. Ana sayfanın HTML kodundaki tanımlara bakalım
-          r = requests.get("https://kariyerkapisi.gov.tr/isealim", headers=headers, verify=False)
-          eslesmeler = re.findall(r"apiURL\s*[:=]\s*['\"`]([^'\"`]+)['\"`]", r.text, re.IGNORECASE)
-          print("HTML'den bulunan apiURL:", eslesmeler)
+      - name: Ilanlari Cek ve Kanala Gonder
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          cat << 'EOF' > test_canli.py
+          import time
+          from adapters.ilan_gov_tr import IlanGovTrAdapter
+          from telegram_sender import TelegramSender
+          from database import Database
 
-          # 2. Infrastructure JS dosyasındaki tanımlara bakalım
-          r2 = requests.get("https://kariyerkapisi.gov.tr/js/Infrastructure.ncmia0gyd4.js", headers=headers, verify=False)
-          eslesmeler2 = re.findall(r"apiURL\s*[:=]\s*['\"`]([^'\"`]+)['\"`]", r2.text, re.IGNORECASE)
-          print("JS'den bulunan apiURL:", eslesmeler2)
-          
-          # Eğer çıkmazsa iko.var tanımını yakalayalım
-          for m in re.finditer(r"apiURL", r2.text):
-              baslangic = max(0, m.start() - 50)
-              bitis = min(len(r2.text), m.end() + 100)
-              print("Etrafındaki kod:", r2.text[baslangic:bitis])
-              break
+          print("1. Telegram ve Veritabanı başlatılıyor...")
+          sender = TelegramSender()
+          db = Database()
+
+          print("2. ilan.gov.tr adaptörü çalıştırılıyor (İlk 3 ilan çekilecek)...")
+          adapter = IlanGovTrAdapter(limit=3)
+          ilanlar = adapter.ilanlari_getir()
+
+          print(f"\n3. Toplam {len(ilanlar)} ilan alındı. Kanala gönderiliyor...")
+          for ilan in ilanlar:
+              b_id = ilan.benzersiz_id
+              if db.ilan_goruldu_mu(b_id):
+                  print(f"-> Zaten görülmüş, atlanıyor: {ilan.baslik[:40]}")
+                  continue
+
+              print(f"-> Kanala gönderiliyor: {ilan.baslik[:50]}")
+              mesaj_id = sender.mesaj_gonder(ilan.to_dict())
+              
+              # Eğer PDF eki varsa gönder
+              for ek in ilan.ek_dosyalar:
+                  time.sleep(1.5)
+                  print(f"   [PDF] Gönderiliyor: {ek['dosya_adi']}")
+                  sender.pdf_gonder(ek["url"], ek["dosya_adi"], yanitlanacak_mesaj_id=mesaj_id)
+
+              # Gönderildi olarak kaydet
+              db.ilani_kaydet(b_id)
+              time.sleep(2)
+
+          print("\nBİTTİ! Tüm yeni ilanlar başarıyla kanala gönderildi! 🎉")
           EOF
-          python adresi_bul.py
+          python test_canli.py
