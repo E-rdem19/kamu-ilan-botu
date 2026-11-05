@@ -1,10 +1,10 @@
-name: IlanGovTr Telegram Canli Test
+name: Kariyer Kapisi Canli Yakalama
 
 on:
   workflow_dispatch:
 
 jobs:
-  canli-test:
+  yakala:
     runs-on: ubuntu-latest
     steps:
       - name: Kodu Kopyala
@@ -20,45 +20,52 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium --with-deps
 
-      - name: Ilanlari Cek ve Kanala Gonder
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Kariyer Kapisini Ac ve Veriyi Yakala
         run: |
-          cat << 'EOF' > test_canli.py
+          cat << 'EOF' > kk_test.py
+          import json
           import time
-          from adapters.ilan_gov_tr import IlanGovTrAdapter
-          from telegram_sender import TelegramSender
-          from database import Database
+          from playwright.sync_api import sync_playwright
 
-          print("1. Telegram ve Veritabanı başlatılıyor...")
-          sender = TelegramSender()
-          db = Database()
+          url = "https://kariyerkapisi.gov.tr/isealim"
 
-          print("2. ilan.gov.tr adaptörü çalıştırılıyor (İlk 3 ilan çekilecek)...")
-          adapter = IlanGovTrAdapter(limit=3)
-          ilanlar = adapter.ilanlari_getir()
+          with sync_playwright() as pw:
+              browser = pw.chromium.launch(headless=True)
+              ctx = browser.new_context(locale="tr-TR", ignore_https_errors=True)
+              page = ctx.new_page()
 
-          print(f"\n3. Toplam {len(ilanlar)} ilan alındı. Kanala gönderiliyor...")
-          for ilan in ilanlar:
-              b_id = ilan.benzersiz_id
-              if db.ilan_goruldu_mu(b_id):
-                  print(f"-> Zaten görülmüş, atlanıyor: {ilan.baslik[:40]}")
-                  continue
+              yakalanan_veriler = []
 
-              print(f"-> Kanala gönderiliyor: {ilan.baslik[:50]}")
-              mesaj_id = sender.mesaj_gonder(ilan.to_dict())
+              def on_response(r):
+                  # İlanları getiren API isteklerini dinle
+                  if any(k in r.url for k in ["SearchIlanPublic", "GetIseAlimPage", "ilan"]):
+                      try:
+                          ct = r.headers.get("content-type", "")
+                          if "json" in ct:
+                              data = r.json()
+                              yakalanan_veriler.append((r.url, data))
+                              print(f"[YAKALANDI] -> URL: {r.url}")
+                      except:
+                          pass
+
+              page.on("response", on_response)
               
-              # Eğer PDF eki varsa gönder
-              for ek in ilan.ek_dosyalar:
-                  time.sleep(1.5)
-                  print(f"   [PDF] Gönderiliyor: {ek['dosya_adi']}")
-                  sender.pdf_gonder(ek["url"], ek["dosya_adi"], yanitlanacak_mesaj_id=mesaj_id)
+              print("Sayfa açılıyor...")
+              page.goto(url, wait_until="networkidle", timeout=60000)
+              page.wait_for_timeout(3000)
 
-              # Gönderildi olarak kaydet
-              db.ilani_kaydet(b_id)
-              time.sleep(2)
+              print(f"\nToplam yakalanan JSON servisi sayısı: {len(yakalanan_veriler)}")
+              for istek_url, veri in yakalanan_veriler:
+                  print("=" * 50)
+                  print("SERVIS URL:", istek_url)
+                  if isinstance(veri, list):
+                      print(f"Liste uzunluğu: {len(veri)} adet ilan/öğe")
+                      if len(veri) > 0:
+                          print("İlk eleman örneği:\n", json.dumps(veri[0], indent=2, ensure_ascii=False)[:600])
+                  elif isinstance(veri, dict):
+                      print("Sözlük anahtarları:", list(veri.keys()))
+                      print("Örnek veri:\n", json.dumps(veri, indent=2, ensure_ascii=False)[:600])
 
-          print("\nBİTTİ! Tüm yeni ilanlar başarıyla kanala gönderildi! 🎉")
+              browser.close()
           EOF
-          python test_canli.py
+          python kk_test.py
