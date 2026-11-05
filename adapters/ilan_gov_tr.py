@@ -54,6 +54,34 @@ def find_item_list(obj):
             return obj
     return []
 
+def set_page(obj, p, size):
+    if isinstance(obj, dict):
+        for k in list(obj.keys()):
+            kl = k.lower()
+            if kl == "skipcount":
+                obj[k] = (p - 1) * size
+            elif kl in ("currentpage", "pagenumber", "page"):
+                obj[k] = p
+            elif kl == "pageindex":
+                obj[k] = p - 1
+            else:
+                set_page(obj[k], p, size)
+    elif isinstance(obj, list):
+        for x in obj:
+            set_page(x, p, size)
+
+def build_request(req_info, p, size):
+    url, method, post, headers = req_info
+    if method == "GET":
+        u = urlparse(url)
+        q = dict(parse_qsl(u.query))
+        set_page(q, p, size)
+        url = urlunparse(u._replace(query=urlencode(q)))
+        return url, None
+    body = json.loads(post) if post else {}
+    set_page(body, p, size)
+    return url, json.dumps(body)
+
 def extract_son_basvuru(text):
     for line in text.split("\n"):
         f = fold(line)
@@ -61,12 +89,12 @@ def extract_son_basvuru(text):
             tarihler = re.findall(DATE_RE, line)
             if tarihler:
                 return tarihler[0]
-    # İkinci deneme
     tarihler = re.findall(DATE_RE, text)
     return tarihler[-1] if tarihler else "Belirtilmemiş"
 
 class IlanGovTrAdapter:
-    def __init__(self, limit: int = 5):
+    def __init__(self, max_pages: int = 4, limit: int = 0):
+        self.max_pages = max_pages # Kaç sayfa ileriye gitsin? (4 sayfa = ~50 ilan)
         self.limit = limit
         self.kaynak_site = "ilan_gov_tr"
 
@@ -99,20 +127,49 @@ class IlanGovTrAdapter:
             page.goto(LIST_URL, wait_until="networkidle", timeout=60000)
             page.wait_for_timeout(2000)
 
+            url, method, post, headers = captured.get("info", (None, None, None, None))
             items = find_item_list(first_resp.get("data", {}))
-            print(f"[İlanGovTr] İlk sayfadan {len(items)} ilan yakalandı.")
+            print(f"[İlanGovTr] Sayfa 1: {len(items)} ilan yakalandı.")
 
-            if self.limit:
-                items = items[:self.limit]
+            all_items = list(items)
+            seen_ids = {it["id"] for it in items if "id" in it}
 
-            for i, it in enumerate(items, 1):
+            # Diğer sayfaları tara (Sayfa 2, 3, 4...)
+            if captured.get("info"):
+                size = 12
+                skip_h = {"content-length", "host", "cookie"}
+                hdrs = {k: v for k, v in headers.items() if k.lower() not in skip_h and not k.startswith(":")}
+
+                for p in range(2, self.max_pages + 1):
+                    try:
+                        u, data = build_request(captured["info"], p, size)
+                        resp = ctx.request.fetch(u, method=method, headers=hdrs, data=data)
+                        if not resp.ok:
+                            break
+                        page_items = find_item_list(resp.json())
+                        new_items = [it for it in page_items if it.get("id") not in seen_ids]
+                        print(f"[İlanGovTr] Sayfa {p}: {len(page_items)} ilan, {len(new_items)} yeni.")
+                        if not new_items:
+                            break
+                        for it in new_items:
+                            seen_ids.add(it["id"])
+                            all_items.append(it)
+                        time.sleep(1)
+                    except Exception as e:
+                        print(f"[İlanGovTr] Sayfa {p} hatası: {e}")
+                        break
+
+            print(f"[İlanGovTr] Toplam taranacak ilan sayısı: {len(all_items)}")
+            if self.limit and self.limit > 0:
+                all_items = all_items[:self.limit]
+
+            for i, it in enumerate(all_items, 1):
                 ad_id = str(it.get("id"))
                 try:
                     url = DETAIL_API.format(id=ad_id)
                     resp = ctx.request.get(url, headers=API_HEADERS)
                     
                     if not resp.ok:
-                        # Tarayıcı içinden fetch yedeği
                         res = page.evaluate("""async (u) => {
                             const r = await fetch(u, {
                                 credentials: 'include',
@@ -125,22 +182,18 @@ class IlanGovTrAdapter:
                         j = resp.json()
 
                     result = j.get("result", j) if isinstance(j, dict) else j
-                    
                     raw_html = result.get("content", "")
                     metin = html_to_text(raw_html)
                     baslik = result.get("title") or it.get("title") or "İlan"
                     kurum = result.get("advertiserName") or "Belirtilmemiş"
                     sehir = result.get("addressCityName") or "Türkiye"
                     yayin = result.get("publishDate") or ""
-                    
                     son_basvuru = extract_son_basvuru(metin)
-                    
+
                     u = result.get("url") or {}
                     link = f"{BASE}/ilan/{ad_id}" + (f"/{u['title']}" if isinstance(u, dict) and u.get("title") else "")
 
-                    # PDF / Ek dosya linklerini metinden ve JSON'dan ara
                     ek_dosyalar = []
-                    # HTML içindeki pdf linklerini bul
                     pdf_linkleri = re.findall(r'href=[\'"]([^\'"]+\.pdf)[\'"]', raw_html, re.I)
                     for pdf_url in set(pdf_linkleri):
                         if not pdf_url.startswith("http"):
@@ -161,11 +214,11 @@ class IlanGovTrAdapter:
                         detay_metni=metin
                     )
                     toplanan_ilanlar.append(ilan_obj)
-                    print(f"[{i}/{len(items)}] Çekildi: {baslik[:50]}...")
+                    print(f"[{i}/{len(all_items)}] Çekildi: {baslik[:45]}...")
                 except Exception as e:
                     print(f"[HATA] İlan {ad_id} çekilemedi: {e}")
                 
-                time.sleep(1)
+                time.sleep(0.5)
 
             browser.close()
 
