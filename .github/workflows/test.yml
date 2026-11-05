@@ -1,76 +1,67 @@
-name: Kariyer Kapisi Canli Yakalama
+name: Kariyer Kapisi Hizli Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  yakala:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Kodu Kopyala
-        uses: actions/checkout@v4
-
       - name: Python Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Paketleri Yukle
-        run: |
-          pip install -r requirements.txt
-          playwright install chromium --with-deps
+        run: pip install requests urllib3
 
-      - name: GetIseAlimPage Verisini Yakala
+      - name: APIyi Hizlica Sorgula
         run: |
-          cat << 'EOF' > kk_test.py
+          cat << 'EOF' > hizli_test.py
+          import requests
+          import urllib3
           import json
-          import time
-          from playwright.sync_api import sync_playwright
 
-          url = "https://kariyerkapisi.gov.tr/isealim"
+          urllib3.disable_warnings()
 
-          with sync_playwright() as pw:
-              browser = pw.chromium.launch(headless=True)
-              ctx = browser.new_context(locale="tr-TR", ignore_https_errors=True)
-              page = ctx.new_page()
+          headers = {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+              "Accept": "application/json, text/plain, */*",
+              "Content-Type": "application/json",
+              "Origin": "https://kariyerkapisi.gov.tr",
+              "Referer": "https://kariyerkapisi.gov.tr/isealim"
+          }
 
-              yakalanan_veri = {}
+          urls = [
+              "https://api.kariyerkapisi.gov.tr/api/ilan/GetIseAlimPage",
+              "https://api.kariyerkapisi.gov.tr/api/ilan/SearchIlanPublic"
+          ]
 
-              def on_response(r):
-                  if "GetIseAlimPage" in r.url:
-                      print(f"\n[YAKALANDI] Durum Kodu: {r.status}")
-                      print(f"İstek Başlıkları: {dict(r.request.headers)}")
-                      print(f"İstek Gövdesi (Payload): {r.request.post_data}")
-                      try:
-                          yakalanan_veri["data"] = r.json()
-                      except Exception as e:
-                          print("JSON okunamadı:", e)
-
-              page.on("response", on_response)
-              
-              page.goto(url, wait_until="domcontentloaded", timeout=30000)
-              page.wait_for_timeout(4000)
-
-              veri = yakalanan_veri.get("data")
-              if veri:
-                  print("=" * 50)
-                  print("KARIYER KAPISI ILANLARI BASARIYLA ALINDI!")
-                  print("=" * 50)
-                  # Dönen verinin yapısını görelim
-                  if isinstance(veri, dict):
-                      print("Sözlük Anahtarları:", list(veri.keys()))
-                      # Muhtemelen 'ilanlar' veya 'data' gibi bir liste vardır
-                      for k, v in veri.items():
-                          if isinstance(v, list):
-                              print(f"\n'{k}' listesinde {len(v)} adet eleman var!")
-                              if len(v) > 0:
-                                  print("İlk İlan Örneği:\n", json.dumps(v[0], indent=2, ensure_ascii=False)[:800])
-                  elif isinstance(veri, list):
-                      print(f"Toplam İlan: {len(veri)}")
-                      print("İlk İlan Örneği:\n", json.dumps(veri[0], indent=2, ensure_ascii=False)[:800])
-              else:
-                  print("Veri henüz yakalanamadı.")
-
-              browser.close()
+          for u in urls:
+              print("=" * 50)
+              print("Deneniyor:", u)
+              try:
+                  r = requests.post(u, headers=headers, json={}, timeout=10, verify=False)
+                  print(f"Durum Kodu: {r.status_code}")
+                  print(f"İçerik Türü: {r.headers.get('content-type')}")
+                  if r.status_code == 200:
+                      veri = r.json()
+                      print("BAŞARILI! Dönen veri türü:", type(veri))
+                      if isinstance(veri, dict):
+                          print("Anahtarlar:", list(veri.keys()))
+                          # İlk liste alanını bulup göster
+                          for k, v in veri.items():
+                              if isinstance(v, list):
+                                  print(f"'{k}' içinde {len(v)} öğe var.")
+                                  if len(v) > 0:
+                                      print("Örnek öğe:\n", json.dumps(v[0], indent=2, ensure_ascii=False)[:600])
+                      elif isinstance(veri, list):
+                          print(f"Toplam {len(veri)} adet ilan geldi!")
+                          if len(veri) > 0:
+                              print("İlk ilan:\n", json.dumps(veri[0], indent=2, ensure_ascii=False)[:600])
+                  else:
+                      print("Yanıt metni (ilk 200 karakter):", r.text[:200])
+              except Exception as e:
+                  print("Hata:", e)
           EOF
-          python kk_test.py
+          python hizli_test.py
