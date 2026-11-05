@@ -25,14 +25,16 @@ def main():
     print("📢 KAMU İLAN TAKİP VE TELEGRAM BİLDİRİM SİSTEMİ BAŞLATILIYOR")
     print("=" * 60)
 
-    # 1. Konfigürasyon ve Servisleri Başlat
     cfg = config_yukle()
     db = Database()
     filtre = FilterEngine(cfg)
 
-    # Telegram göndericisini başlat
+    tg_cfg = cfg.get("telegram", {})
+    token = os.environ.get("TELEGRAM_BOT_TOKEN") or tg_cfg.get("bot_token")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID") or tg_cfg.get("chat_id")
+
     try:
-        sender = TelegramSender()
+        sender = TelegramSender(token=token, chat_id=chat_id)
     except Exception as e:
         print(f"[KRİTİK HATA] Telegram başlatılamadı: {e}")
         return
@@ -41,22 +43,20 @@ def main():
     pdf_cfg = cfg.get("pdf", {})
     bekleme_sn = sistem_cfg.get("istekler_arasi_bekleme_sn", 1.5)
     sessiz_mod = sistem_cfg.get("sessiz_kayit_modu", False)
-    
-    # İlk çalıştırma kontrolü: Eğer veritabanı tamamen boşsa sessiz mod devrede mi?
+
     ilk_calistirma = len(db.gorulen_idler) == 0
 
-    # 2. Adaptör Listesi
+    # Adaptör Listesi (Genişletilmiş Sayfa ve İlanlar)
     adaptorler = [
-        ("İlan Gov Tr", IlanGovTrAdapter(limit=10)),
-        ("Kariyer Kapısı", KariyerKapisiAdapter(limit=15)),
-        ("Kamuilan SBB", KamuIlanAdapter(limit=15)),
-        ("Yerel Yönetimler", YerelYonetimlerAdapter(limit=15))
+        ("İlan Gov Tr", IlanGovTrAdapter(max_pages=4, limit=0)),
+        ("Kariyer Kapısı", KariyerKapisiAdapter(limit=30)),
+        ("Kamuilan SBB", KamuIlanAdapter(limit=30)),
+        ("Yerel Yönetimler", YerelYonetimlerAdapter(limit=30))
     ]
 
     toplam_yeni_ilan = 0
     hatali_siteler = []
 
-    # 3. Siteleri Sırayla Tara
     for ad, adaptor in adaptorler:
         print(f"\n--- [{ad}] Taranıyor ---")
         try:
@@ -70,30 +70,24 @@ def main():
         for ilan in ilanlar:
             b_id = ilan.benzersiz_id
 
-            # Daha önce görüldü mü?
             if db.ilan_goruldu_mu(b_id):
                 continue
 
-            # Filtreden geçiyor mu?
             if not filtre.ilani_kontrol_et(ilan):
-                # Filtreye takılanı da görüldü sayalım ki her seferinde tekrar incelemesin
                 db.ilani_kaydet(b_id)
                 continue
 
-            # Sessiz mod kontrolü: İlk çalıştırmada kanalı spam yapmamak için sadece kaydet
-            if sessiz_mod or (ilk_calistirma and len(db.gorulen_idler) > 10):
+            if sessiz_mod:
                 print(f"[Sessiz Kayıt] Hafızaya alınıyor: {ilan.baslik[:40]}")
                 db.ilani_kaydet(b_id)
                 continue
 
-            # 4. Telegram'a Gönderim Aşaması
             try:
                 print(f"[Telegram] İlan gönderiliyor: {ilan.baslik[:45]}...")
                 mesaj_id = sender.mesaj_gonder(ilan.to_dict())
                 toplam_yeni_ilan += 1
                 time.sleep(bekleme_sn)
 
-                # PDF Gönderimi (Eğer ayar açıksa)
                 if pdf_cfg.get("gonder", True) and ilan.ek_dosyalar:
                     max_adet = pdf_cfg.get("maksimum_adet", 5)
                     max_boyut = pdf_cfg.get("maksimum_boyut_mb", 50)
@@ -108,7 +102,6 @@ def main():
                         )
                         time.sleep(bekleme_sn)
 
-                # Tüm işlemler başarıyla bittikten sonra görüldü olarak mühürle!
                 db.ilani_kaydet(b_id)
 
             except Exception as tg_e:
