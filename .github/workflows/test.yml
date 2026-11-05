@@ -20,10 +20,9 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium --with-deps
 
-      - name: Kariyer Kapisini Ac ve Veriyi Yakala
+      - name: Sayfadaki Butun Ag Isteklerini Gor
         run: |
           cat << 'EOF' > kk_test.py
-          import json
           import time
           from playwright.sync_api import sync_playwright
 
@@ -34,41 +33,31 @@ jobs:
               ctx = browser.new_context(locale="tr-TR", ignore_https_errors=True)
               page = ctx.new_page()
 
-              yakalanan_veriler = []
+              tum_istekler = []
 
-              def on_response(r):
-                  # İlanlarla ilgili servisleri yakala
-                  if any(k in r.url.lower() for k in ["search", "ilan", "isealim"]):
-                      try:
-                          ct = r.headers.get("content-type", "")
-                          if "json" in ct:
-                              data = r.json()
-                              yakalanan_veriler.append((r.url, data))
-                              print(f"[YAKALANDI] -> URL: {r.url}")
-                      except:
-                          pass
+              def on_request(r):
+                  # Resim, yazı tipi ve css hariç her isteği topla
+                  if r.resource_type in ["fetch", "xhr"]:
+                      tum_istekler.append((r.method, r.url))
 
-              page.on("response", on_response)
+              page.on("request", on_request)
               
-              print("Sayfa açılıyor...")
-              # networkidle yerine domcontentloaded ile anında geçiyoruz
               page.goto(url, wait_until="domcontentloaded", timeout=30000)
-              print("Sayfa başlığı:", page.title())
-              
-              # İlanların yüklenmesi için 4 saniye bekle
-              page.wait_for_timeout(4000)
+              page.wait_for_timeout(3000)
 
-              print(f"\nToplam yakalanan JSON servisi sayısı: {len(yakalanan_veriler)}")
-              for istek_url, veri in yakalanan_veriler:
-                  print("=" * 50)
-                  print("SERVIS URL:", istek_url)
-                  if isinstance(veri, list):
-                      print(f"Liste uzunluğu: {len(veri)} adet")
-                      if len(veri) > 0:
-                          print("İlk eleman örneği:\n", json.dumps(veri[0], indent=2, ensure_ascii=False)[:600])
-                  elif isinstance(veri, dict):
-                      print("Sözlük anahtarları:", list(veri.keys()))
-                      print("Örnek veri:\n", json.dumps(veri, indent=2, ensure_ascii=False)[:600])
+              print("=" * 50)
+              print(f"SAYFADAN GIDEN AJAX / FETCH ISTEKLERI ({len(tum_istekler)} adet):")
+              print("=" * 50)
+              for method, u in tum_istekler:
+                  print(f"[{method}] -> {u}")
+
+              print("\n" + "=" * 50)
+              print("SAYFADA TIKLANABILIR BUTONLAR:")
+              print("=" * 50)
+              butonlar = page.locator("button, a.btn, input[type=submit]").all_text_contents()
+              for b in butonlar:
+                  if b.strip():
+                      print("-> Buton:", b.strip())
 
               browser.close()
           EOF
