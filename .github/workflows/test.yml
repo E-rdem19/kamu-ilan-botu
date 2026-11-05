@@ -37,8 +37,8 @@ jobs:
               yakalanan_veriler = []
 
               def on_response(r):
-                  # İlanları getiren API isteklerini dinle
-                  if any(k in r.url for k in ["SearchIlanPublic", "GetIseAlimPage", "ilan"]):
+                  # İlanlarla ilgili servisleri yakala
+                  if any(k in r.url.lower() for k in ["search", "ilan", "isealim"]):
                       try:
                           ct = r.headers.get("content-type", "")
                           if "json" in ct:
@@ -51,15 +51,19 @@ jobs:
               page.on("response", on_response)
               
               print("Sayfa açılıyor...")
-              page.goto(url, wait_until="networkidle", timeout=60000)
-              page.wait_for_timeout(3000)
+              # networkidle yerine domcontentloaded ile anında geçiyoruz
+              page.goto(url, wait_until="domcontentloaded", timeout=30000)
+              print("Sayfa başlığı:", page.title())
+              
+              # İlanların yüklenmesi için 4 saniye bekle
+              page.wait_for_timeout(4000)
 
               print(f"\nToplam yakalanan JSON servisi sayısı: {len(yakalanan_veriler)}")
               for istek_url, veri in yakalanan_veriler:
                   print("=" * 50)
                   print("SERVIS URL:", istek_url)
                   if isinstance(veri, list):
-                      print(f"Liste uzunluğu: {len(veri)} adet ilan/öğe")
+                      print(f"Liste uzunluğu: {len(veri)} adet")
                       if len(veri) > 0:
                           print("İlk eleman örneği:\n", json.dumps(veri[0], indent=2, ensure_ascii=False)[:600])
                   elif isinstance(veri, dict):
